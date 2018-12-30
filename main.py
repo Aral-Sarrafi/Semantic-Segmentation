@@ -45,8 +45,9 @@ def load_vgg(sess, vgg_path):
     layer7_out = graph.get_tensor_by_name(vgg_layer7_out_tensor_name)
     
     return input_image, keep_prob, layer3_out, layer4_out, layer7_out
-tests.test_load_vgg(load_vgg, tf)
 
+print("VGG16 load fuction test.")
+tests.test_load_vgg(load_vgg, tf)
 
 def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     """
@@ -58,8 +59,58 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
     # TODO: Implement function
-    return None
+    layer7_conv1x1 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1,
+                                      padding= "same",
+                                      kernel_initializer= tf.random_normal_initializer(stddev= 0.01),
+                                      kernel_regularizer= tf.contrib.layers.l2_regularizer(1e-3))
+    # upsample layer7_conv1x1 (X2)
+    upX2_layer7_conv1x1 = tf.layers.conv2d_transpose(layer7_conv1x1, num_classes, 4,
+                                                     strides= (2,2),
+                                                     padding="SAME",
+                                                     kernel_initializer= tf.random_normal_initializer(stddev=0.01),
+                                                     kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+    # Apply 1X1 convolution on layer 4 to make the dimensions of layer 4 and upX2_layer7_conv1x1 same.
+    # This stage is necessary to make sure that the tensors have the same dimension, so we can add them.
+
+    layer4_conv1x1 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1,
+                                      padding="SAME",
+                                      kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+                                      kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+
+    # Implement the first Skip connection: Second Row in the paper.
+    skip1 = tf.add(layer4_conv1x1, upX2_layer7_conv1x1)
+
+    # upsample the skip1 layer for the next layer.
+
+    upX2_skip1 = tf.layers.conv2d_transpose(skip1, num_classes,4,
+                                            strides= (2,2),
+                                            padding="SAME",
+                                            kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+                                            kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+
+    # Apply 1X1 convolution on layer 3 to make the dimensions of layer 3 and upX2_skip1 same.(depth dimension should be the number of classes.)
+    # This stage is necessary to make sure that the tensors have the same dimension, so we can add them.
+    layer3_conv1x1 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1,
+                                      padding = "SAME",
+                                      kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+                                      kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+
+    # Implement the second Skip connection: Third Row in the paper.
+    skip2 = tf.add(upX2_skip1,layer3_conv1x1)
+
+    # Upsample the skip2 layer to the original image size(x8)
+
+    nn_last_layer = tf.layers.conv2d_transpose(skip2, num_classes, 16,
+                                             strides= (8,8),
+                                             padding="SAME",
+                                             kernel_initializer= tf.random_normal_initializer(stddev=0.01),
+                                             kernel_regularizer= tf.contrib.layers.l2_regularizer(1e-3))
+
+    return nn_last_layer
+
+print("Layers function Test.")
 tests.test_layers(layers)
+
 
 
 def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
@@ -73,7 +124,8 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     """
     # TODO: Implement function
     return None, None, None
-tests.test_optimize(optimize)
+
+#tests.test_optimize(optimize)
 
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
